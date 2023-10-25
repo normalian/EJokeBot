@@ -11,32 +11,29 @@ using System.Threading.Tasks;
 using Microsoft.SemanticKernel;
 using Microsoft.Extensions.Configuration;
 using System.IO;
+using Microsoft.Extensions.Logging;
+using EJokeBot.Services;
 
 namespace EJokeBot.Bots
 {
     public class EJokeBot : ActivityHandler
     {
+        private readonly ILogger<EJokeBot> _logger;
+        private readonly IJokeGenerator _jokeGenerator;
+
+        public EJokeBot(IJokeGenerator jokeGenerator , ILogger<EJokeBot> logger)
+        {
+            _logger = logger;
+            _jokeGenerator = jokeGenerator;
+        }
+
         protected override async Task OnMessageActivityAsync(ITurnContext<IMessageActivity> turnContext, CancellationToken cancellationToken)
         {
-            var configuration = new ConfigurationBuilder().AddJsonFile("appsettings.json").Build();
-            var builder = new KernelBuilder();
-            builder.WithAzureChatCompletionService(
-                     configuration["AOAISettings:DeploymentName"], // Azure OpenAI Deployment Name
-                     configuration["AOAISettings:Endpoint"],       // Azure OpenAI Endpoint
-                     configuration["AOAISettings:ApiKey"]);        // Azure OpenAI Key
-            var kernel = builder.Build();
-            var prompt = @"貴方は漫才師です。以下の文章・単語を使ってエンジニアが楽しめるジョークを１００文字位で作ってください。
-
-{{$input}}";
-            var joke = kernel.CreateSemanticFunction(prompt);
-
             // output diagnostic message
-            System.Diagnostics.Trace.TraceError($"user input is {turnContext.Activity.Text}");
+            _logger.LogTrace("user input is {userInput}", turnContext.Activity.Text);
 
-            var reply = await joke.InvokeAsync(turnContext.Activity.Text, kernel); //$"Echo v2: {turnContext.Activity.Text}";
-            var replyText = reply.ToString();
-
-            await turnContext.SendActivityAsync(MessageFactory.Text(replyText, replyText), cancellationToken);
+            var reply = await _jokeGenerator.GenerateJokeAsync(turnContext.Activity.Text, cancellationToken);
+            await turnContext.SendActivityAsync(MessageFactory.Text(reply, reply), cancellationToken);
         }
 
         protected override async Task OnMembersAddedAsync(IList<ChannelAccount> membersAdded, ITurnContext<IConversationUpdateActivity> turnContext, CancellationToken cancellationToken)
